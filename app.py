@@ -96,7 +96,7 @@ class FitnessAI:
         try:
             headers = {
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.api_key}",
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
                 "HTTP-Referer": "http://localhost:5000",  # Required for OpenRouter
                 "X-Title": "FitCoach AI"  # Required for OpenRouter
             }
