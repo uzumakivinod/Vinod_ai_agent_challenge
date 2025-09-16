@@ -18,7 +18,8 @@ CORS(app)
 
 # Configuration - FIXED: Use OPENROUTER_API_KEY instead of DEEPSEEK_API_KEY
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fitness-coach-ai-secret-key-2025')
-OPENROUTER_API_KEY = "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"
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+
 
 
 # In-memory storage (replace with actual database in production)
