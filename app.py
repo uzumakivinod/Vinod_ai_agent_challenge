@@ -223,92 +223,79 @@ def chat():
     try:
         data = request.get_json()
         user_question = data.get('question', '')
-        user_id = data.get('user_id', 'anonymous')
         
         if not user_question:
             return jsonify({'error': 'No question provided'}), 400
         
-        # Create context-aware prompt
+        # Debug: Check if API key is loaded
+        if not OPENROUTER_API_KEY:
+            return jsonify({
+                'success': True,
+                'response': "❌ OpenRouter API key not found in environment variables"
+            })
+        
         prompt = f"""
-        You are a knowledgeable fitness coach chatbot. Answer this fitness-related question:
+        You are a fitness coach. Answer this question briefly and helpfully:
         
-        Question: {user_question}
-        
-        Provide a helpful, accurate, and encouraging response. Keep it concise but informative.
-        Focus on practical advice and safety considerations.
+        {user_question}
         """
         
-        # FIXED: Better OpenRouter API call with detailed error handling
         try:
+            # FIXED: Proper headers for Render deployment
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                "HTTP-Referer": "http://localhost:5000",
-                "X-Title": "FitCoach AI Chat"
+                "HTTP-Referer": request.host_url.rstrip('/'),  # Automatically gets your Render URL
+                "X-Title": "FitCoach AI"
             }
             
             api_data = {
                 "model": "deepseek/deepseek-r1:free",
                 "messages": [
-                    {"role": "system", "content": "You are a professional fitness coach providing helpful advice."},
                     {"role": "user", "content": prompt}
                 ],
-                "stream": False,
-                "temperature": 0.7,
-                "max_tokens": 1000
+                "max_tokens": 500,
+                "temperature": 0.7
             }
             
-            logger.info(f"🔄 Making OpenRouter API call...")
-            logger.info(f"🔑 Using API key: {OPENROUTER_API_KEY[:15]}...")
+            logger.info(f"🔑 API Key: {OPENROUTER_API_KEY[:20]}...")
+            logger.info(f"🌐 Referer: {request.host_url}")
             
-            response = requests.post("https://openrouter.ai/api/v1/chat/completions", 
-                                   headers=headers, json=api_data, timeout=30)
+            response = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers, 
+                json=api_data, 
+                timeout=30
+            )
             
-            logger.info(f"📊 OpenRouter Response Status: {response.status_code}")
+            logger.info(f"📊 OpenRouter Status: {response.status_code}")
             
             if response.status_code == 200:
                 result = response.json()
                 ai_response = result['choices'][0]['message']['content']
-                logger.info("✅ OpenRouter API call successful!")
-                
+                logger.info("✅ OpenRouter success!")
                 return jsonify({
                     'success': True,
                     'response': ai_response
                 })
             else:
-                # Log the actual error from OpenRouter
-                error_text = response.text
-                logger.error(f"❌ OpenRouter API failed: {response.status_code} - {error_text}")
-                
+                error_details = response.text
+                logger.error(f"❌ OpenRouter failed: {response.status_code} - {error_details}")
                 return jsonify({
                     'success': True,
-                    'response': f"OpenRouter Error [{response.status_code}]: {error_text[:200]}..."
+                    'response': f"OpenRouter Error [{response.status_code}]: {error_details}"
                 })
                 
-        except requests.exceptions.Timeout as e:
-            logger.error(f"⏰ OpenRouter API timeout: {str(e)}")
-            return jsonify({
-                'success': True,
-                'response': f"Request timeout: {str(e)}"
-            })
-            
-        except requests.exceptions.RequestException as e:
-            logger.error(f"🌐 OpenRouter API request error: {str(e)}")
-            return jsonify({
-                'success': True,
-                'response': f"Request error: {str(e)}"
-            })
-            
         except Exception as api_error:
-            logger.error(f"💥 OpenRouter API exception: {str(api_error)}")
+            logger.error(f"💥 API Exception: {str(api_error)}")
             return jsonify({
                 'success': True,
                 'response': f"API Exception: {str(api_error)}"
             })
         
     except Exception as e:
-        logger.error(f"Error in chat endpoint: {str(e)}")
-        return jsonify({'error': f'Failed to process question: {str(e)}'}), 500
+        logger.error(f"Chat error: {str(e)}")
+        return jsonify({'error': f'Chat failed: {str(e)}'}), 500
 
 @app.route('/api/log-progress', methods=['POST'])
 def log_progress():
