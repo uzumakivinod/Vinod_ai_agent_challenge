@@ -1407,6 +1407,407 @@ function initializeApp() {
     
     console.log('FitCoach AI App initialized successfully');
 }
+// Add these functions to your app.js file to fix the workout and meal logging issues
+
+// FIXED: Add missing startWorkout function
+startWorkout() {
+    console.log('Starting workout...');
+
+    // Show loading state
+    this.showNotification('Starting your workout session...', 'info');
+
+    // Call the API to start workout
+    fetch('/api/start-workout', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            user_id: 'demo-user',
+            workout_type: 'general'
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            this.showNotification('Workout started successfully! 💪', 'success');
+
+            // Store workout session data
+            this.currentWorkoutId = data.workout_id;
+            this.workoutStartTime = new Date();
+
+            // Show workout in progress UI
+            this.showWorkoutInterface();
+
+        } else {
+            this.showNotification('Failed to start workout: ' + data.error, 'warning');
+        }
+    })
+    .catch(error => {
+        console.error('Error starting workout:', error);
+        this.showNotification('Error starting workout. Please try again.', 'warning');
+    });
+}
+
+// FIXED: Add showWorkoutInterface function
+showWorkoutInterface() {
+    // Create workout interface modal or section
+    const workoutModal = document.createElement('div');
+    workoutModal.className = 'workout-modal';
+    workoutModal.innerHTML = `
+        <div class="workout-modal-content">
+            <div class="workout-header">
+                <h2>🏋️ Workout in Progress</h2>
+                <button class="close-btn" onclick="this.parentElement.parentElement.parentElement.remove()">×</button>
+            </div>
+            <div class="workout-timer">
+                <div class="timer-display" id="workout-timer">00:00</div>
+                <p>Elapsed Time</p>
+            </div>
+            <div class="workout-controls">
+                <button class="btn-primary" onclick="app.completeWorkout()">Complete Workout</button>
+                <button class="btn-secondary" onclick="app.pauseWorkout()">Pause</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(workoutModal);
+
+    // Start timer
+    this.startWorkoutTimer();
+}
+
+// FIXED: Add workout timer
+startWorkoutTimer() {
+    this.workoutTimer = setInterval(() => {
+        if (this.workoutStartTime) {
+            const elapsed = Math.floor((new Date() - this.workoutStartTime) / 1000);
+            const minutes = Math.floor(elapsed / 60);
+            const seconds = elapsed % 60;
+            const timerDisplay = document.getElementById('workout-timer');
+            if (timerDisplay) {
+                timerDisplay.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            }
+        }
+    }, 1000);
+}
+
+// FIXED: Add completeWorkout function
+completeWorkout() {
+    console.log('Completing workout...');
+
+    if (!this.currentWorkoutId || !this.workoutStartTime) {
+        this.showNotification('No active workout session found', 'warning');
+        return;
+    }
+
+    const duration = Math.floor((new Date() - this.workoutStartTime) / (1000 * 60)); // minutes
+
+    // Call the API to complete workout
+    fetch('/api/complete-workout', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            user_id: 'demo-user',
+            workout_id: this.currentWorkoutId,
+            duration: duration,
+            exercises_completed: [] // You can track this separately
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            this.showNotification(`Workout completed! Duration: ${duration} minutes 🎉`, 'success');
+
+            // Clear workout session
+            this.currentWorkoutId = null;
+            this.workoutStartTime = null;
+            if (this.workoutTimer) {
+                clearInterval(this.workoutTimer);
+                this.workoutTimer = null;
+            }
+
+            // Remove workout interface
+            const workoutModal = document.querySelector('.workout-modal');
+            if (workoutModal) {
+                workoutModal.remove();
+            }
+
+            // Update dashboard stats
+            this.updateDashboardStats();
+
+        } else {
+            this.showNotification('Failed to complete workout: ' + data.error, 'warning');
+        }
+    })
+    .catch(error => {
+        console.error('Error completing workout:', error);
+        this.showNotification('Error completing workout. Please try again.', 'warning');
+    });
+}
+
+// FIXED: Add meal logging functions
+logMeal(mealType = 'general') {
+    console.log('Logging meal:', mealType);
+
+    // Show meal logging modal
+    this.showMealLoggingModal(mealType);
+}
+
+showMealLoggingModal(mealType) {
+    const mealModal = document.createElement('div');
+    mealModal.className = 'meal-modal';
+    mealModal.innerHTML = `
+        <div class="meal-modal-content">
+            <div class="meal-header">
+                <h2>🍽️ Log ${mealType.charAt(0).toUpperCase() + mealType.slice(1)}</h2>
+                <button class="close-btn" onclick="this.parentElement.parentElement.parentElement.remove()">×</button>
+            </div>
+            <div class="meal-form">
+                <div class="form-group">
+                    <label>Food Items</label>
+                    <textarea id="food-items" placeholder="Enter food items (one per line)"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Estimated Calories</label>
+                    <input type="number" id="meal-calories" placeholder="Enter calories" min="0">
+                </div>
+                <div class="form-actions">
+                    <button class="btn-primary" onclick="app.saveMealLog('${mealType}')">Save Meal</button>
+                    <button class="btn-secondary" onclick="this.parentElement.parentElement.parentElement.parentElement.remove()">Cancel</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(mealModal);
+}
+
+saveMealLog(mealType) {
+    const foodItemsEl = document.getElementById('food-items');
+    const caloriesEl = document.getElementById('meal-calories');
+
+    if (!foodItemsEl || !caloriesEl) {
+        this.showNotification('Error: Meal form not found', 'warning');
+        return;
+    }
+
+    const foodItems = foodItemsEl.value.split('\n').filter(item => item.trim());
+    const calories = parseInt(caloriesEl.value) || 0;
+
+    if (foodItems.length === 0) {
+        this.showNotification('Please enter at least one food item', 'warning');
+        return;
+    }
+
+    // Call the API to log meal
+    fetch('/api/log-meal', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            user_id: 'demo-user',
+            meal_type: mealType,
+            food_items: foodItems,
+            calories: calories
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            this.showNotification(`${mealType.charAt(0).toUpperCase() + mealType.slice(1)} logged successfully! 🎉`, 'success');
+
+            // Remove modal
+            const mealModal = document.querySelector('.meal-modal');
+            if (mealModal) {
+                mealModal.remove();
+            }
+
+            // Update dashboard stats
+            this.updateDashboardStats();
+
+        } else {
+            this.showNotification('Failed to log meal: ' + data.error, 'warning');
+        }
+    })
+    .catch(error => {
+        console.error('Error logging meal:', error);
+        this.showNotification('Error logging meal. Please try again.', 'warning');
+    });
+}
+
+// FIXED: Add general progress logging
+logProgress(type, value) {
+    console.log('Logging progress:', type, value);
+
+    fetch('/api/log-progress', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            user_id: 'demo-user',
+            type: type,
+            value: value
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            this.showNotification('Progress logged successfully! 📊', 'success');
+            this.updateDashboardStats();
+        } else {
+            this.showNotification('Failed to log progress: ' + data.error, 'warning');
+        }
+    })
+    .catch(error => {
+        console.error('Error logging progress:', error);
+        this.showNotification('Error logging progress. Please try again.', 'warning');
+    });
+}
+
+// FIXED: Add pauseWorkout function
+pauseWorkout() {
+    console.log('Pausing workout...');
+    this.showNotification('Workout paused', 'info');
+
+    if (this.workoutTimer) {
+        clearInterval(this.workoutTimer);
+        this.workoutTimer = null;
+    }
+
+    // You can add more pause logic here
+}
+
+// Add CSS for the modals
+const modalStyles = `
+<style>
+.workout-modal, .meal-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+}
+
+.workout-modal-content, .meal-modal-content {
+    background: var(--bg-card);
+    border-radius: var(--border-radius-large);
+    padding: 30px;
+    max-width: 500px;
+    width: 90%;
+    border: 1px solid rgba(108, 92, 231, 0.2);
+}
+
+.workout-header, .meal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.workout-header h2, .meal-header h2 {
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 1.5rem;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.close-btn:hover {
+    color: var(--text-primary);
+}
+
+.workout-timer {
+    text-align: center;
+    margin: 30px 0;
+}
+
+.timer-display {
+    font-size: 3rem;
+    font-weight: 700;
+    color: var(--primary-color);
+    margin-bottom: 10px;
+}
+
+.workout-controls, .form-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.meal-form .form-group {
+    margin-bottom: 20px;
+}
+
+.meal-form label {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.meal-form textarea, .meal-form input {
+    width: 100%;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--border-radius);
+    color: var(--text-primary);
+    font-family: inherit;
+    resize: vertical;
+}
+
+.meal-form textarea {
+    height: 100px;
+}
+
+.meal-form input:focus, .meal-form textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.1);
+}
+
+@media (max-width: 768px) {
+    .workout-modal-content, .meal-modal-content {
+        margin: 20px;
+        width: calc(100% - 40px);
+    }
+
+    .timer-display {
+        font-size: 2rem;
+    }
+
+    .workout-controls, .form-actions {
+        flex-direction: column;
+    }
+}
+</style>
+`;
+
+// Inject the styles
+if (!document.querySelector('.modal-styles')) {
+    const styleSheet = document.createElement('style');
+    styleSheet.className = 'modal-styles';
+    styleSheet.innerHTML = modalStyles.replace('<style>', '').replace('</style>', '');
+    document.head.appendChild(styleSheet);
+}
+Asset 8 of 9
 
 // Add CSS for dashboard sections
 const dashboardStyles = `
